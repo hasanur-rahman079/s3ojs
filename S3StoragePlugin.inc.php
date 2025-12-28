@@ -174,15 +174,6 @@ class S3StoragePlugin extends GenericPlugin
     }
 
     /**
-     * @copydoc Plugin::getInstallSchemaFile()
-     * Return path to schema file if plugin needs database tables
-     */
-    public function getInstallSchemaFile()
-    {
-        return null; // This plugin uses plugin_settings, no custom tables
-    }
-
-    /**
      * @copydoc Plugin::getActions()
      */
     public function getActions($request, $actionArgs)

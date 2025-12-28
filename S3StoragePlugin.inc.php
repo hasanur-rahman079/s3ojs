@@ -450,9 +450,11 @@ class S3StoragePlugin extends GenericPlugin
             return false;
         }
         
-        // Check if auto-sync is enabled (site-wide setting, contextId = 0)
+        // Check if auto-sync is enabled (site-wide setting)
         $autoSyncEnabled = $this->getSetting(null, 's3_auto_sync');
+        error_log('S3StoragePlugin: autoSyncFile - auto_sync setting value: ' . var_export($autoSyncEnabled, true));
         if (!$autoSyncEnabled) {
+            error_log('S3StoragePlugin: autoSyncFile - auto-sync is disabled or not set');
             return false;
         }
         

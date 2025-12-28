@@ -60,7 +60,7 @@ class S3StoragePlugin extends GenericPlugin
             Hook::add('FileManager::downloadFile', [$this, 'handleFileManagerDownload']);
             
             // If delete local is enabled, hook into the filesystem adapter to use S3
-            if ($this->getSetting(0, 's3_delete_local_after_sync')) {
+            if ($this->getSetting(null, 's3_delete_local_after_sync')) {
                 Hook::add('File::adapter', [$this, 'configureS3Adapter']);
             }
         }
@@ -142,8 +142,8 @@ class S3StoragePlugin extends GenericPlugin
                 $templateMgr->registerPlugin('function', 'plugin_url', [$this, 'smartyPluginUrl']);
 
                 require_once(dirname(__FILE__) . '/S3StorageSettingsForm.inc.php');
-                // Use context_id = 0 for site-wide settings
-                $form = new S3StorageSettingsForm($this, 0);
+                // Use context_id = null for site-wide settings (OJS 3.5+)
+                $form = new S3StorageSettingsForm($this, null);
 
                 if ($request->getUserVar('save')) {
                     $form->readInputData();
@@ -185,7 +185,7 @@ class S3StoragePlugin extends GenericPlugin
     {
         require_once(dirname(__FILE__) . '/S3FileManager.inc.php');
         // Use site-wide settings (contextId = 0)
-        $fileManager = $this->getS3FileManager(0);
+        $fileManager = $this->getS3FileManager(null);
 
         if (!$fileManager) {
             $errorMessage = 'Sync failed: S3FileManager could not be initialized. Check settings.';
@@ -377,15 +377,15 @@ class S3StoragePlugin extends GenericPlugin
     {
         error_log('S3StoragePlugin: configureS3Adapter called');
         
-        $bucket = $this->getSetting(0, 's3_bucket');
-        $key = $this->getSetting(0, 's3_key');
-        $secret = $this->getSetting(0, 's3_secret');
-        $region = $this->getSetting(0, 's3_region');
-        $provider = $this->getSetting(0, 's3_provider') ?: 'aws';
-        $customEndpoint = $this->getSetting(0, 's3_custom_endpoint');
+        $bucket = $this->getSetting(null, 's3_bucket');
+        $key = $this->getSetting(null, 's3_key');
+        $secret = $this->getSetting(null, 's3_secret');
+        $region = $this->getSetting(null, 's3_region');
+        $provider = $this->getSetting(null, 's3_provider') ?: 'aws';
+        $customEndpoint = $this->getSetting(null, 's3_custom_endpoint');
 
-        $hybridMode = (bool) $this->getSetting(0, 's3_hybrid_mode');
-        $fallbackEnabled = (bool) $this->getSetting(0, 's3_fallback_enabled');
+        $hybridMode = (bool) $this->getSetting(null, 's3_hybrid_mode');
+        $fallbackEnabled = (bool) $this->getSetting(null, 's3_fallback_enabled');
 
         if (empty($bucket) || empty($key) || empty($secret)) {
             error_log('S3StoragePlugin: Missing credentials for S3 adapter');
@@ -451,13 +451,13 @@ class S3StoragePlugin extends GenericPlugin
         }
         
         // Check if auto-sync is enabled (site-wide setting, contextId = 0)
-        $autoSyncEnabled = $this->getSetting(0, 's3_auto_sync');
+        $autoSyncEnabled = $this->getSetting(null, 's3_auto_sync');
         if (!$autoSyncEnabled) {
             return false;
         }
         
         // Get S3 file manager (site-wide settings)
-        $fileManager = $this->getS3FileManager(0);
+        $fileManager = $this->getS3FileManager(null);
         if (!$fileManager) {
             return false;
         }
@@ -480,7 +480,7 @@ class S3StoragePlugin extends GenericPlugin
             $uploadResult = $fileManager->uploadToCloud($fullPath, $s3Key);
             
             // If upload was successful and delete local setting is enabled, delete local file
-            if ($uploadResult && $this->getSetting(0, 's3_delete_local_after_sync')) {
+            if ($uploadResult && $this->getSetting(null, 's3_delete_local_after_sync')) {
                 // Verify file exists in S3 before deleting local copy
                 if ($fileManager->fileExistsInCloud($s3Key)) {
                     unlink($fullPath);
@@ -579,7 +579,7 @@ class S3StoragePlugin extends GenericPlugin
         }
         
         // Get site-wide settings (context_id = 0 for site-wide)
-        $s3DirectServing = $this->getSetting(0, 's3_direct_serving');
+        $s3DirectServing = $this->getSetting(null, 's3_direct_serving');
         if (!$s3DirectServing) {
             return false; // Direct serving not enabled
         }
@@ -589,7 +589,7 @@ class S3StoragePlugin extends GenericPlugin
         $s3Key = $this->buildS3KeyFromPath($filePath);
         
         // Get S3 file manager
-        $fileManager = $this->getS3FileManager(0);
+        $fileManager = $this->getS3FileManager(null);
         if (!$fileManager) {
             return false;
         }
@@ -623,7 +623,7 @@ class S3StoragePlugin extends GenericPlugin
         $result = &$args[3];
         
         // Get site-wide settings
-        $s3DirectServing = $this->getSetting(0, 's3_direct_serving');
+        $s3DirectServing = $this->getSetting(null, 's3_direct_serving');
         if (!$s3DirectServing) {
             return false;
         }
@@ -636,7 +636,7 @@ class S3StoragePlugin extends GenericPlugin
         $s3Key = $this->buildS3KeyFromPath($relativePath);
         
         // Get S3 file manager
-        $fileManager = $this->getS3FileManager(0);
+        $fileManager = $this->getS3FileManager(null);
         if (!$fileManager) {
             return false;
         }
@@ -695,7 +695,7 @@ class S3StoragePlugin extends GenericPlugin
     {
         require_once(dirname(__FILE__) . '/S3FileManager.inc.php');
         // Use site-wide settings (contextId = 0)
-        $fileManager = $this->getS3FileManager(0);
+        $fileManager = $this->getS3FileManager(null);
 
         if (!$fileManager) {
             $errorMessage = 'Restore failed: S3FileManager could not be initialized. Check settings.';

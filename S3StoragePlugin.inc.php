@@ -37,16 +37,26 @@ class S3StoragePlugin extends GenericPlugin
      */
     public function register($category, $path, $mainContextId = null)
     {
+        // Log BEFORE any checks to see if plugin is even loaded
+        error_log('S3StoragePlugin: register() ENTRY - category=' . $category . ', mainContextId=' . var_export($mainContextId, true));
+        
         $success = parent::register($category, $path, $mainContextId);
         
         if (Application::isUnderMaintenance()) {
             return $success;
         }
         
+        // Fix sitewide flag in versions table - OJS doesn't properly update this on reinstall
+        // This ensures the plugin loads in ALL contexts (journals) when enabled at site level
+        $this->ensureSitewideFlag();
+        
         // For site-wide plugins, always check enabled status at site level (null context)
         // This ensures the plugin loads in ALL contexts (journals) when enabled at site level
         $isEnabled = $this->getEnabled(null);
-        error_log('S3StoragePlugin: register() called - success=' . ($success ? 'true' : 'false') . ', isEnabled=' . ($isEnabled ? 'true' : 'false') . ', mainContextId=' . var_export($mainContextId, true));
+        
+        // Also check what the parent would return for the current context
+        $parentEnabled = parent::getEnabled($mainContextId);
+        error_log('S3StoragePlugin: register() - success=' . ($success ? 'true' : 'false') . ', isEnabled(null)=' . ($isEnabled ? 'true' : 'false') . ', parentEnabled=' . ($parentEnabled ? 'true' : 'false') . ', mainContextId=' . var_export($mainContextId, true));
 
         if ($success && $isEnabled) {
             error_log('S3StoragePlugin: Registering hooks for auto-sync');
@@ -171,6 +181,24 @@ class S3StoragePlugin extends GenericPlugin
         // if (!$enabled) { $this->cleanupPluginSettings(null); }
         
         return parent::setEnabled($enabled);
+    }
+
+    /**
+     * Ensure the sitewide flag is set in the versions table
+     * This fixes an OJS bug where reinstalling a plugin doesn't update the sitewide flag
+     * Without this fix, site-wide plugins may not load in journal contexts
+     */
+    private function ensureSitewideFlag()
+    {
+        try {
+            // Use Illuminate DB facade for direct SQL to update versions table
+            \Illuminate\Support\Facades\DB::table('versions')
+                ->where('product', $this->getName())
+                ->where('product_type', 'plugins.generic')
+                ->update(['sitewide' => 1]);
+        } catch (\Exception $e) {
+            error_log('S3StoragePlugin: Failed to update sitewide flag: ' . $e->getMessage());
+        }
     }
 
     /**

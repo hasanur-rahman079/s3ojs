@@ -43,7 +43,9 @@ class S3StoragePlugin extends GenericPlugin
             return $success;
         }
         
-        $isEnabled = $this->getEnabled($mainContextId);
+        // For site-wide plugins, always check enabled status at site level (null context)
+        // This ensures the plugin loads in ALL contexts (journals) when enabled at site level
+        $isEnabled = $this->getEnabled(null);
         error_log('S3StoragePlugin: register() called - success=' . ($success ? 'true' : 'false') . ', isEnabled=' . ($isEnabled ? 'true' : 'false') . ', mainContextId=' . var_export($mainContextId, true));
 
         if ($success && $isEnabled) {

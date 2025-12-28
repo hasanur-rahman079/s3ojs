@@ -44,8 +44,10 @@ class S3StoragePlugin extends GenericPlugin
         }
         
         $isEnabled = $this->getEnabled($mainContextId);
+        error_log('S3StoragePlugin: register() called - success=' . ($success ? 'true' : 'false') . ', isEnabled=' . ($isEnabled ? 'true' : 'false') . ', mainContextId=' . var_export($mainContextId, true));
 
         if ($success && $isEnabled) {
+            error_log('S3StoragePlugin: Registering hooks for auto-sync');
             // Register the S3 file manager
             Hook::add('FileManager::getFileManager', [$this, 'getFileManager']);
 

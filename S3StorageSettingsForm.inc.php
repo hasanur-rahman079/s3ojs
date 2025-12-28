@@ -165,10 +165,10 @@ class S3StorageSettingsForm extends Form
     public function execute(...$functionArgs)
     {
         $this->_plugin->updateSetting($this->_contextId, 's3_provider', $this->getData('s3_provider'), 'string');
-        $this->_plugin->updateSetting($this->_contextId, 's3_custom_endpoint', trim($this->getData('s3_custom_endpoint'), "\"\';"), 'string');
-        $this->_plugin->updateSetting($this->_contextId, 's3_bucket', trim($this->getData('s3_bucket'), "\"\';"), 'string');
-        $this->_plugin->updateSetting($this->_contextId, 's3_key', trim($this->getData('s3_key'), "\"\';"), 'string');
-        $this->_plugin->updateSetting($this->_contextId, 's3_secret', trim($this->getData('s3_secret'), "\"\';"), 'string');
+        $this->_plugin->updateSetting($this->_contextId, 's3_custom_endpoint', trim((string) $this->getData('s3_custom_endpoint'), "\"\';"), 'string');
+        $this->_plugin->updateSetting($this->_contextId, 's3_bucket', trim((string) $this->getData('s3_bucket'), "\"\';"), 'string');
+        $this->_plugin->updateSetting($this->_contextId, 's3_key', trim((string) $this->getData('s3_key'), "\"\';"), 'string');
+        $this->_plugin->updateSetting($this->_contextId, 's3_secret', trim((string) $this->getData('s3_secret'), "\"\';"), 'string');
         $this->_plugin->updateSetting($this->_contextId, 's3_region', $this->getData('s3_region'), 'string');
         $this->_plugin->updateSetting($this->_contextId, 's3_hybrid_mode', $this->getData('s3_hybrid_mode'), 'bool');
         $this->_plugin->updateSetting($this->_contextId, 's3_fallback_enabled', $this->getData('s3_fallback_enabled'), 'bool');

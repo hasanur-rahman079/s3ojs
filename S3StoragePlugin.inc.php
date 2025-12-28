@@ -112,6 +112,77 @@ class S3StoragePlugin extends GenericPlugin
     }
 
     /**
+     * Get the path to install site-level plugin settings
+     * This file is executed when the plugin is first enabled
+     *
+     * @return string|null
+     */
+    public function getInstallSitePluginSettingsFile()
+    {
+        return $this->getPluginPath() . '/settings.xml';
+    }
+
+    /**
+     * Clean up plugin settings from the database
+     * Called when the plugin is disabled or uninstalled
+     *
+     * @param int|null $contextId Context ID (null for site-wide)
+     * @return bool
+     */
+    public function cleanupPluginSettings($contextId = null)
+    {
+        $pluginSettingsDao = DAORegistry::getDAO('PluginSettingsDAO');
+        
+        // List of all settings used by this plugin
+        $settings = [
+            's3_provider',
+            's3_custom_endpoint', 
+            's3_bucket',
+            's3_key',
+            's3_secret',
+            's3_region',
+            's3_hybrid_mode',
+            's3_fallback_enabled',
+            's3_auto_sync',
+            's3_cron_enabled',
+            's3_cleanup_orphaned',
+            's3_direct_serving',
+            's3_delete_local_after_sync',
+        ];
+        
+        foreach ($settings as $setting) {
+            $pluginSettingsDao->deleteSetting($contextId ?? 0, $this->getName(), $setting);
+        }
+        
+        // Also delete the enabled setting
+        $pluginSettingsDao->deleteSetting($contextId ?? 0, $this->getName(), 'enabled');
+        
+        return true;
+    }
+
+    /**
+     * @copydoc Plugin::setEnabled()
+     * Override to cleanup settings when plugin is disabled
+     */
+    public function setEnabled($enabled)
+    {
+        // If disabling the plugin, optionally cleanup settings
+        // Uncomment the next line if you want to auto-cleanup on disable
+        // if (!$enabled) { $this->cleanupPluginSettings(null); }
+        
+        return parent::setEnabled($enabled);
+    }
+
+    /**
+     * @copydoc Plugin::getInstallSchemaFile()
+     * Return path to schema file if plugin needs database tables
+     */
+    public function getInstallSchemaFile()
+    {
+        return null; // This plugin uses plugin_settings, no custom tables
+    }
+
+    /**
      * @copydoc Plugin::getActions()
      */
     public function getActions($request, $actionArgs)

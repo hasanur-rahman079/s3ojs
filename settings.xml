@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE install SYSTEM "../../../lib/pkp/dtd/pluginSettings.dtd">
+<!--
+  * plugins/generic/s3ojs/settings.xml
+  *
+  * Copyright (c) 2023 OJS/PKP
+  * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
+  *
+  * S3 Storage plugin - default settings (site-wide installation)
+  -->
+<install>
+	<!-- Default provider is AWS S3 -->
+	<setting name="s3_provider" type="string">aws</setting>
+	
+	<!-- Enable hybrid mode by default (keep local copies) -->
+	<setting name="s3_hybrid_mode" type="bool">true</setting>
+	
+	<!-- Enable fallback to local storage -->
+	<setting name="s3_fallback_enabled" type="bool">true</setting>
+	
+	<!-- Disable auto-sync by default until credentials are configured -->
+	<setting name="s3_auto_sync" type="bool">false</setting>
+	
+	<!-- Disable cron by default -->
+	<setting name="s3_cron_enabled" type="bool">false</setting>
+	
+	<!-- Disable orphaned cleanup by default -->
+	<setting name="s3_cleanup_orphaned" type="bool">false</setting>
+	
+	<!-- Disable direct serving by default -->
+	<setting name="s3_direct_serving" type="bool">false</setting>
+	
+	<!-- Keep local files after sync by default -->
+	<setting name="s3_delete_local_after_sync" type="bool">false</setting>
+</install>

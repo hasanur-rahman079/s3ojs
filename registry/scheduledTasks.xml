@@ -11,7 +11,7 @@
   -->
 
 <scheduled_tasks>
-    <task class="plugins.generic.s3Storage.S3StorageCronHandler">
+    <task class="APP\plugins\generic\s3ojs\S3StorageCronHandler">
         <frequency day="1" />
     </task>
 </scheduled_tasks> 

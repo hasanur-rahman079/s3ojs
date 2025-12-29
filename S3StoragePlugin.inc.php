@@ -806,4 +806,52 @@ class S3StoragePlugin extends GenericPlugin
         $successMessage = __('plugins.generic.s3Storage.restore.completed') . " ({$results['success']} files restored to local storage)";
         return new JSONMessage(true, $successMessage);
     }
+ 
+    /**
+     * Get valid files from database for a context
+     *
+     * @param Context $context
+     *
+     * @return array List of valid file paths
+     */
+    private function getValidFilesFromDatabase($context)
+    {
+        $validFiles = [];
+        $contextId = $context->getId();
+ 
+        // 1. Submission files (using modern Repository pattern)
+        $submissionFiles = Repo::submissionFile()
+            ->getCollector()
+            ->filterByContextIds([$contextId])
+            ->getMany();
+ 
+        foreach ($submissionFiles as $submissionFile) {
+            $path = $submissionFile->getData('path');
+            if ($path) {
+                $validFiles[] = $path;
+            }
+        }
+ 
+        // 2. Journal Settings Files (Logos, Thumbnails, CSS, etc.)
+        $settingsFilesKeys = [
+            'pageHeaderLogoImage',
+            'pageHeaderTitleImage',
+            'homepageImage',
+            'journalThumbnail',
+            'styleSheet',
+        ];
+ 
+        foreach ($settingsFilesKeys as $settingKey) {
+            $imageMetadata = $context->getData($settingKey);
+            if ($imageMetadata && is_array($imageMetadata) && isset($imageMetadata['uploadName'])) {
+                // Settings files are usually in journals/{id}/$uploadName
+                $validFiles[] = 'journals/' . $contextId . '/' . $imageMetadata['uploadName'];
+            } elseif ($imageMetadata && is_string($imageMetadata)) {
+                // Sometimes it's just a filename string
+                $validFiles[] = 'journals/' . $contextId . '/' . $imageMetadata;
+            }
+        }
+ 
+        return array_unique($validFiles);
+    }
 }

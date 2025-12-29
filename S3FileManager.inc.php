@@ -261,7 +261,7 @@ class S3FileManager extends FileManager
                 'Key' => $sourceFile,
             ]);
 
-            $stream = $result->getBody()->getContentAsStream();
+            $stream = $result->getBody()->getContentAsResource();
             $destStream = fopen($destFile, 'wb');
             stream_copy_to_stream($stream, $destStream);
             fclose($destStream);

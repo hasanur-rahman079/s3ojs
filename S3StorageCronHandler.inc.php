@@ -3,6 +3,7 @@
 namespace APP\plugins\generic\s3ojs;
 
 use APP\core\Application;
+use APP\facades\Repo;
 use PKP\plugins\PluginRegistry;
 use PKP\scheduledTask\ScheduledTask;
 use PKP\config\Config;
@@ -24,7 +25,7 @@ class S3StorageCronHandler extends ScheduledTask
 
         // Get plugin instance
         $pluginRegistry = PluginRegistry::getPluginRegistry();
-        $this->plugin = $pluginRegistry->getPlugin('generic', 's3Storage');
+        $this->plugin = $pluginRegistry->getPlugin('generic', 's3ojs');
     }
 
     /**
@@ -241,7 +242,7 @@ class S3StorageCronHandler extends ScheduledTask
         $contextId = $context->getId();
 
         // 1. Submission files (using modern Repository pattern)
-        $submissionFiles = \Repo::submissionFile()
+        $submissionFiles = Repo::submissionFile()
             ->getCollector()
             ->filterByContextIds([$contextId])
             ->getMany();

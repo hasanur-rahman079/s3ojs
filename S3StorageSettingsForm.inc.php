@@ -16,7 +16,7 @@
 namespace APP\plugins\generic\s3ojs;
 
 use APP\template\TemplateManager;
-use Aws\S3\S3Client;
+use AsyncAws\S3\S3Client;
 use Exception;
 use PKP\form\Form;
 use PKP\form\validation\FormValidator;
@@ -223,25 +223,25 @@ class S3StorageSettingsForm extends Form
             }
 
             $config = [
-                'version' => 'latest',
                 'region' => $region,
-                'credentials' => [
-                    'key' => $key,
-                    'secret' => $secret,
-                ],
+                'accessKeyId' => $key,
+                'accessKeySecret' => $secret,
             ];
 
             // Set endpoint based on provider
             switch ($provider) {
                 case 'wasabi':
                     $config['endpoint'] = $customEndpoint ?: "https://s3.{$region}.wasabisys.com";
+                    $config['pathStyleEndpoint'] = true;
                     break;
                 case 'digitalocean':
                     $config['endpoint'] = $customEndpoint ?: "https://{$region}.digitaloceanspaces.com";
+                    $config['pathStyleEndpoint'] = true;
                     break;
                 case 'custom':
                     if ($customEndpoint) {
                         $config['endpoint'] = $customEndpoint;
+                        $config['pathStyleEndpoint'] = true;
                         // For custom endpoints, we might need to add protocol if missing
                         if (!preg_match('/^https?:\/\//', $config['endpoint'])) {
                             $config['endpoint'] = 'https://' . $config['endpoint'];
@@ -261,9 +261,10 @@ class S3StorageSettingsForm extends Form
             $s3Client = new S3Client($config);
 
             // Test bucket access
-            $result = $s3Client->headBucket([
+            $s3Client->listObjectsV2([
                 'Bucket' => $bucket,
-            ]);
+                'MaxKeys' => 1,
+            ])->resolve();
 
             error_log('S3StoragePlugin: Connection test successful');
             return true;

@@ -141,33 +141,21 @@ class S3StoragePlugin extends GenericPlugin
      */
     public function cleanupPluginSettings($contextId = null)
     {
-        $pluginSettingsDao = DAORegistry::getDAO('PluginSettingsDAO');
-        
-        // List of all settings used by this plugin
-        $settings = [
-            's3_provider',
-            's3_custom_endpoint', 
-            's3_bucket',
-            's3_key',
-            's3_secret',
-            's3_region',
-            's3_hybrid_mode',
-            's3_fallback_enabled',
-            's3_auto_sync',
-            's3_cron_enabled',
-            's3_cleanup_orphaned',
-            's3_direct_serving',
-            's3_delete_local_after_sync',
-        ];
-        
-        foreach ($settings as $setting) {
-            $pluginSettingsDao->deleteSetting($contextId ?? 0, $this->getName(), $setting);
+        try {
+            // Use direct SQL to avoid PluginSettingsDAO issues
+            \Illuminate\Support\Facades\DB::table('plugin_settings')
+                ->where('plugin_name', $this->getName())
+                ->when($contextId !== null, function ($query) use ($contextId) {
+                    return $query->where('context_id', $contextId);
+                })
+                ->delete();
+            
+            error_log('S3StoragePlugin: Database cleanup successful for context ' . ($contextId ?? 'all'));
+            return true;
+        } catch (\Exception $e) {
+            error_log('S3StoragePlugin: Failed to cleanup settings: ' . $e->getMessage());
+            return false;
         }
-        
-        // Also delete the enabled setting
-        $pluginSettingsDao->deleteSetting($contextId ?? 0, $this->getName(), 'enabled');
-        
-        return true;
     }
 
     /**
@@ -176,11 +164,21 @@ class S3StoragePlugin extends GenericPlugin
      */
     public function setEnabled($enabled)
     {
-        // If disabling the plugin, optionally cleanup settings
-        // Uncomment the next line if you want to auto-cleanup on disable
-        // if (!$enabled) { $this->cleanupPluginSettings(null); }
+        // Cleanup settings when plugin is disabled so it starts fresh if re-enabled
+        if (!$enabled) {
+            $this->cleanupPluginSettings();
+        }
         
         return parent::setEnabled($enabled);
+    }
+ 
+    /**
+     * @copydoc Plugin::deinstall()
+     */
+    public function deinstall()
+    {
+        $this->cleanupPluginSettings();
+        return parent::deinstall();
     }
 
     /**
@@ -487,36 +485,33 @@ class S3StoragePlugin extends GenericPlugin
         }
 
         try {
-            // Load the plugin's composer autoloader (includes Flysystem S3 adapter)
+            // Load the plugin's composer autoloader
             require_once(dirname(__FILE__) . '/vendor/autoload.php');
             require_once(dirname(__FILE__) . '/S3HybridAdapter.inc.php');
-
-            // Build S3 client config
-            $config = [
-                'version' => 'latest',
+ 
+            // Build AsyncAws S3 client
+            $s3Config = [
                 'region' => $region ?: 'us-east-1',
-                'credentials' => [
-                    'key' => $key,
-                    'secret' => $secret,
-                ],
+                'accessKeyId' => $key,
+                'accessKeySecret' => $secret,
             ];
-
+ 
             // Custom endpoint for non-AWS providers
             if ($provider !== 'aws' && !empty($customEndpoint)) {
-                $config['endpoint'] = $customEndpoint;
-                $config['use_path_style_endpoint'] = true;
+                $s3Config['endpoint'] = $customEndpoint;
+                $s3Config['pathStyleEndpoint'] = true;
             }
-
-            $s3Client = new \Aws\S3\S3Client($config);
-            $s3Adapter = new \League\Flysystem\AwsS3V3\AwsS3V3Adapter($s3Client, $bucket);
-
+ 
+            $s3Client = new \AsyncAws\S3\S3Client($s3Config);
+            $s3Adapter = new \League\Flysystem\AsyncAwsS3\AsyncAwsS3Adapter($s3Client, $bucket);
+ 
             // Default adapter (local) is passed in $args[0]
             $localAdapter = $args[0];
-
+ 
             // Wrap in hybrid adapter
             $args[0] = new S3HybridAdapter($s3Adapter, $localAdapter, $hybridMode, $fallbackEnabled);
-
-            error_log('S3StoragePlugin: S3 Hybrid Flysystem adapter configured successfully (Hybrid: ' . ($hybridMode ? 'Yes' : 'No') . ', Fallback: ' . ($fallbackEnabled ? 'Yes' : 'No') . ')');
+ 
+            error_log('S3StoragePlugin: AsyncAws S3 Hybrid Flysystem adapter configured successfully');
 
             return true;
         } catch (\Exception $e) {

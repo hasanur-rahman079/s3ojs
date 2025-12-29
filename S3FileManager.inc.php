@@ -15,12 +15,14 @@
 
 namespace APP\plugins\generic\s3ojs;
 
-use Aws\Exception\AwsException;
-use Aws\S3\S3Client;
+use AsyncAws\S3\S3Client;
+use AsyncAws\S3\Exception\S3Exception;
 use Exception;
-use PKP\file\FileManager;
+use DateTimeImmutable;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use PKP\file\FileManager;
+use PKP\core\PKPApplication;
 
 class S3FileManager extends FileManager
 {
@@ -85,50 +87,36 @@ class S3FileManager extends FileManager
     {
         try {
             $config = [
-                'version' => 'latest',
                 'region' => $this->region,
-                'credentials' => [
-                    'key' => $key,
-                    'secret' => $secret,
-                ],
-                // Add this to handle cURL SSL certificate issue on local dev environments.
-                // This is insecure for production but acceptable for local testing.
-                'http' => [
-                    'verify' => false,
-                ],
+                'accessKeyId' => $key,
+                'accessKeySecret' => $secret,
             ];
 
             // Set endpoint and other provider-specific settings
             switch ($this->provider) {
                 case 'wasabi':
                     $config['endpoint'] = $this->customEndpoint ?: "https://s3.{$this->region}.wasabisys.com";
-                    $config['use_path_style_endpoint'] = true;
+                    $config['pathStyleEndpoint'] = true;
                     break;
                 case 'digitalocean':
                     $config['endpoint'] = $this->customEndpoint ?: "https://{$this->region}.digitaloceanspaces.com";
-                    $config['use_path_style_endpoint'] = true;
+                    $config['pathStyleEndpoint'] = true;
                     break;
                 case 'custom':
                     if ($this->customEndpoint) {
                         $config['endpoint'] = $this->customEndpoint;
-                        // For many S3-compatible services, path-style endpoint is required.
-                        $config['use_path_style_endpoint'] = true;
+                        $config['pathStyleEndpoint'] = true;
                     }
                     break;
                 case 'aws':
                 default:
-                    // Use default AWS endpoints (virtual host style)
                     if ($this->customEndpoint) {
                         $config['endpoint'] = $this->customEndpoint;
                     }
                     break;
             }
 
-            $logConfig = $config;
-            if (isset($logConfig['credentials']['secret'])) {
-                $logConfig['credentials']['secret'] = '***';
-            }
-            error_log('S3StoragePlugin: Initializing S3 client with config: ' . json_encode($logConfig));
+            error_log('S3StoragePlugin: Initializing AsyncAws S3 client');
 
             $this->s3Client = new S3Client($config);
         } catch (Exception $e) {
@@ -184,15 +172,15 @@ class S3FileManager extends FileManager
         }
 
         try {
-            $result = $this->s3Client->putObject([
+            $this->s3Client->putObject([
                 'Bucket' => $this->bucket,
                 'Key' => $destFile,
-                'SourceFile' => $sourceFile,
+                'Body' => fopen($sourceFile, 'rb'),
                 'ContentType' => $this->getMimeType($sourceFile),
             ]);
 
             return true;
-        } catch (AwsException $e) {
+        } catch (S3Exception $e) {
             error_log('S3StoragePlugin: Failed to upload file to cloud: ' . $e->getMessage());
             return false;
         }
@@ -220,17 +208,16 @@ class S3FileManager extends FileManager
                 // If we cannot get a temp URL, we should not silently fall back.
                 // Forcing an error message is better for debugging.
                 // We will try to re-run the command inside a try/catch to get the specific exception message.
-                $errorMessage = 'Không thể lấy thông báo lỗi cụ thể từ AWS SDK.';
+                $errorMessage = 'Unable to get specific error message from AsyncAws.';
                 try {
-                    $cmd = $this->s3Client->getCommand('GetObject', [
+                    $this->s3Client->getObject([
                         'Bucket' => $this->bucket,
                         'Key' => $sourceFile,
-                    ]);
-                    $this->s3Client->createPresignedRequest($cmd, '+10 minutes');
-                } catch (AwsException $e) {
-                    $errorMessage = 'Lý do (AWS SDK): ' . htmlspecialchars($e->getMessage());
+                    ])->resolve();
+                } catch (S3Exception $e) {
+                    $errorMessage = 'Reason (S3Exception): ' . htmlspecialchars($e->getMessage());
                 } catch (Exception $e) {
-                    $errorMessage = 'Lý do (Lỗi Chung): ' . htmlspecialchars($e->getMessage());
+                    $errorMessage = 'Reason (Exception): ' . htmlspecialchars($e->getMessage());
                 }
 
                 header('Content-Type: text/plain; charset=utf-8');
@@ -272,11 +259,15 @@ class S3FileManager extends FileManager
             $result = $this->s3Client->getObject([
                 'Bucket' => $this->bucket,
                 'Key' => $sourceFile,
-                'SaveAs' => $destFile,
             ]);
 
+            $stream = $result->getBody()->getContentAsStream();
+            $destStream = fopen($destFile, 'wb');
+            stream_copy_to_stream($stream, $destStream);
+            fclose($destStream);
+
             return file_exists($destFile);
-        } catch (AwsException $e) {
+        } catch (S3Exception $e) {
             error_log('S3StoragePlugin: Failed to download file from cloud: ' . $e->getMessage());
             return false;
         }
@@ -326,14 +317,14 @@ class S3FileManager extends FileManager
         }
 
         try {
-            $result = $this->s3Client->copyObject([
+            $this->s3Client->copyObject([
                 'Bucket' => $this->bucket,
                 'Key' => $destFile,
                 'CopySource' => $this->bucket . '/' . $sourceFile,
             ]);
 
             return true;
-        } catch (AwsException $e) {
+        } catch (S3Exception $e) {
             error_log('S3StoragePlugin: Failed to copy file in cloud: ' . $e->getMessage());
             return false;
         }
@@ -381,13 +372,13 @@ class S3FileManager extends FileManager
         }
 
         try {
-            $result = $this->s3Client->deleteObject([
+            $this->s3Client->deleteObject([
                 'Bucket' => $this->bucket,
                 'Key' => $filePath,
             ]);
 
             return true;
-        } catch (AwsException $e) {
+        } catch (S3Exception $e) {
             error_log('S3StoragePlugin: Failed to delete file from cloud: ' . $e->getMessage());
             return false;
         }
@@ -438,13 +429,13 @@ class S3FileManager extends FileManager
         }
 
         try {
-            $result = $this->s3Client->headObject([
+            $this->s3Client->headObject([
                 'Bucket' => $this->bucket,
                 'Key' => $filePath,
-            ]);
+            ])->resolve();
 
             return true;
-        } catch (AwsException $e) {
+        } catch (S3Exception $e) {
             return false;
         }
     }
@@ -526,56 +517,50 @@ class S3FileManager extends FileManager
         }
 
         try {
-            $paginator = $this->s3Client->getPaginator('ListObjectsV2', [
+            $objects = $this->s3Client->listObjectsV2([
                 'Bucket' => $this->bucket,
                 'Prefix' => $cloudPath ? rtrim($cloudPath, '/') . '/' : '',
             ]);
 
-            foreach ($paginator as $result) {
-                if (!isset($result['Contents'])) {
+            foreach ($objects as $object) {
+                $key = $object->getKey();
+                
+                // Skip directory markers (keys ending with /)
+                if (str_ends_with($key, '/')) {
                     continue;
                 }
 
-                foreach ($result['Contents'] as $object) {
-                    $key = $object['Key'];
-                    
-                    // Skip directory markers (keys ending with /)
-                    if (str_ends_with($key, '/')) {
+                // Determine relative path for local storage
+                if ($cloudPath) {
+                    $relativePath = substr($key, strlen(rtrim($cloudPath, '/') . '/'));
+                } else {
+                    $relativePath = $key;
+                }
+
+                $destPath = $localPath . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+                
+                // Create local directory if it doesn't exist
+                $destDir = dirname($destPath);
+                if (!is_dir($destDir)) {
+                    if (!mkdir($destDir, 0777, true) && !is_dir($destDir)) {
+                        $results['failed']++;
+                        $results['errors'][] = "Failed to create directory: {$destDir}";
                         continue;
                     }
+                }
 
-                    // Determine relative path for local storage
-                    if ($cloudPath) {
-                        $relativePath = substr($key, strlen(rtrim($cloudPath, '/') . '/'));
-                    } else {
-                        $relativePath = $key;
-                    }
-
-                    $destPath = $localPath . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
-                    
-                    // Create local directory if it doesn't exist
-                    $destDir = dirname($destPath);
-                    if (!is_dir($destDir)) {
-                        if (!mkdir($destDir, 0777, true) && !is_dir($destDir)) {
-                            $results['failed']++;
-                            $results['errors'][] = "Failed to create directory: {$destDir}";
-                            continue;
-                        }
-                    }
-
-                    // Download the file
-                    if ($this->downloadFromCloud($key, $destPath)) {
-                        $results['success']++;
-                    } else {
-                        $results['failed']++;
-                        $results['errors'][] = "Failed to download: {$key}";
-                    }
+                // Download the file
+                if ($this->downloadFromCloud($key, $destPath)) {
+                    $results['success']++;
+                } else {
+                    $results['failed']++;
+                    $results['errors'][] = "Failed to download: {$key}";
                 }
             }
 
             return $results;
-        } catch (AwsException $e) {
-            $results['errors'][] = 'AWS Error: ' . $e->getMessage();
+        } catch (S3Exception $e) {
+            $results['errors'][] = 'S3 Error: ' . $e->getMessage();
             return $results;
         } catch (Exception $e) {
             $results['errors'][] = 'Error: ' . $e->getMessage();
@@ -606,29 +591,23 @@ class S3FileManager extends FileManager
         $validFilesSet = array_flip($validFiles);
 
         try {
-            $paginator = $this->s3Client->getPaginator('ListObjectsV2', [
+            $objects = $this->s3Client->listObjectsV2([
                 'Bucket' => $this->bucket,
                 'Prefix' => $prefix ? rtrim($prefix, '/') . '/' : '',
             ]);
 
-            foreach ($paginator as $result) {
-                if (empty($result['Contents'])) {
-                    continue;
-                }
+            foreach ($objects as $object) {
+                $key = $object->getKey();
 
-                foreach ($result['Contents'] as $object) {
-                    $key = $object['Key'];
-
-                    if (!isset($validFilesSet[$key])) {
-                        if ($this->deleteFromCloud($key)) {
-                            $results['deleted']++;
-                        } else {
-                            $results['errors'][] = "Failed to delete: {$key}";
-                        }
+                if (!isset($validFilesSet[$key])) {
+                    if ($this->deleteFromCloud($key)) {
+                        $results['deleted']++;
+                    } else {
+                        $results['errors'][] = "Failed to delete: {$key}";
                     }
                 }
             }
-        } catch (AwsException $e) {
+        } catch (S3Exception $e) {
             $results['errors'][] = 'Failed to list objects: ' . $e->getMessage();
         }
 
@@ -655,19 +634,15 @@ class S3FileManager extends FileManager
             try {
                 $count = 0;
                 $size = 0;
-                $paginator = $this->s3Client->getPaginator('ListObjectsV2', ['Bucket' => $this->bucket]);
-                foreach ($paginator as $result) {
-                    if (isset($result['Contents'])) {
-                        foreach ($result['Contents'] as $object) {
-                            $count++;
-                            $size += $object['Size'];
-                        }
-                    }
+                $objects = $this->s3Client->listObjectsV2(['Bucket' => $this->bucket]);
+                foreach ($objects as $object) {
+                    $count++;
+                    $size += $object->getSize();
                 }
                 $stats['cloud']['count'] = $count;
                 $stats['cloud']['size'] = $size;
 
-            } catch (AwsException $e) {
+            } catch (S3Exception $e) {
                 error_log('S3StoragePlugin: Failed to get cloud storage stats: ' . $e->getMessage());
             }
         }
@@ -687,13 +662,14 @@ class S3FileManager extends FileManager
         }
 
         try {
-            $result = $this->s3Client->headBucket([
+            $this->s3Client->listObjectsV2([
                 'Bucket' => $this->bucket,
-            ]);
+                'MaxKeys' => 1,
+            ])->resolve();
 
             return true;
-        } catch (AwsException $e) {
-            $errorMessage = 'S3 Error: ' . ($e->getAwsErrorMessage() ?: $e->getMessage());
+        } catch (S3Exception $e) {
+            $errorMessage = 'S3 Error: ' . $e->getMessage();
             error_log('S3StoragePlugin: Connection test failed: ' . $errorMessage);
             return $errorMessage;
         } catch (Exception $e) {
@@ -718,14 +694,14 @@ class S3FileManager extends FileManager
         }
 
         try {
-            $cmd = $this->s3Client->getCommand('GetObject', [
-                'Bucket' => $this->bucket,
-                'Key' => $filePath,
-            ]);
-
-            $request = $this->s3Client->createPresignedRequest($cmd, "+{$expires} seconds");
-            return (string) $request->getUri();
-        } catch (AwsException $e) {
+            return $this->s3Client->presign(
+                $this->s3Client->getObject([
+                    'Bucket' => $this->bucket,
+                    'Key' => $filePath,
+                ]),
+                new \DateTimeImmutable("+{$expires} seconds")
+            );
+        } catch (Exception $e) {
             error_log('S3StoragePlugin: Failed to generate temporary URL: ' . $e->getMessage());
             return false;
         }
@@ -803,8 +779,8 @@ class S3FileManager extends FileManager
                 'Key' => $filePath,
             ]);
 
-            return $result['ContentLength'];
-        } catch (AwsException $e) {
+            return $result->getContentLength();
+        } catch (S3Exception $e) {
             return false;
         }
     }
@@ -851,24 +827,20 @@ class S3FileManager extends FileManager
 
         try {
             $files = [];
-            $paginator = $this->s3Client->getPaginator('ListObjectsV2', [
+            $objects = $this->s3Client->listObjectsV2([
                 'Bucket' => $this->bucket,
                 'Prefix' => $directory,
             ]);
 
-            foreach ($paginator as $result) {
-                if (isset($result['Contents'])) {
-                    foreach ($result['Contents'] as $object) {
-                        $filename = basename($object['Key']);
-                        if (!$filter || preg_match($filter, $filename)) {
-                            $files[] = $filename;
-                        }
-                    }
+            foreach ($objects as $object) {
+                $filename = basename($object->getKey());
+                if (!$filter || preg_match($filter, $filename)) {
+                    $files[] = $filename;
                 }
             }
 
             return $files;
-        } catch (AwsException $e) {
+        } catch (S3Exception $e) {
             error_log('S3StoragePlugin: Failed to list directory contents: ' . $e->getMessage());
             return [];
         }
@@ -932,38 +904,20 @@ class S3FileManager extends FileManager
         }
 
         try {
-            $paginator = $this->s3Client->getPaginator('ListObjectsV2', [
+            $objects = $this->s3Client->listObjectsV2([
                 'Bucket' => $this->bucket,
                 'Prefix' => rtrim($dirPath, '/') . '/',
             ]);
 
-            $objectsToDelete = [];
-            foreach ($paginator as $result) {
-                if (isset($result['Contents'])) {
-                    foreach ($result['Contents'] as $object) {
-                        $objectsToDelete[] = ['Key' => $object['Key']];
-
-                        // deleteObjects supports up to 1000 keys at a time
-                        if (count($objectsToDelete) === 1000) {
-                            $this->s3Client->deleteObjects([
-                                'Bucket' => $this->bucket,
-                                'Delete' => ['Objects' => $objectsToDelete],
-                            ]);
-                            $objectsToDelete = [];
-                        }
-                    }
-                }
-            }
-
-            if (!empty($objectsToDelete)) {
-                $this->s3Client->deleteObjects([
+            foreach ($objects as $object) {
+                $this->s3Client->deleteObject([
                     'Bucket' => $this->bucket,
-                    'Delete' => ['Objects' => $objectsToDelete],
+                    'Key' => $object->getKey(),
                 ]);
             }
 
             return true;
-        } catch (AwsException $e) {
+        } catch (S3Exception $e) {
             error_log('S3StoragePlugin: Failed to remove directory: ' . $e->getMessage());
             return false;
         }

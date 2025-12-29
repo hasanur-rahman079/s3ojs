@@ -1,19 +1,12 @@
 <?php
+ 
+namespace APP\plugins\generic\s3ojs;
 
-/**
- * @file plugins/generic/s3Storage/S3StorageCronHandler.inc.php
- *
- * Copyright (c) 2023 OJS/PKP
- * Distributed under the GNU GPL v3. For full terms see the file docs/COPYING.
- *
- * @class S3StorageCronHandler
- *
- * @ingroup plugins_generic_s3Storage
- *
- * @brief Cron handler for S3 Storage plugin maintenance tasks
- */
-
-import('lib.pkp.classes.scheduledTask.ScheduledTask');
+use APP\core\Application;
+use PKP\plugins\PluginRegistry;
+use PKP\scheduledTask\ScheduledTask;
+use PKP\config\Config;
+use Exception;
 
 class S3StorageCronHandler extends ScheduledTask
 {
@@ -231,8 +224,8 @@ class S3StorageCronHandler extends ScheduledTask
             return null;
         }
 
-        import('plugins.generic.s3Storage.S3FileManager');
-        return new S3FileManager($bucket, $key, $secret, $region, $provider, $customEndpoint, $hybridMode, $fallbackEnabled);
+        require_once(dirname(__FILE__) . '/S3FileManager.inc.php');
+        return new \APP\plugins\generic\s3ojs\S3FileManager($bucket, $key, $secret, $region, $provider, $customEndpoint, $hybridMode, $fallbackEnabled);
     }
 
     /**
